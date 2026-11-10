@@ -1,0 +1,38 @@
+# Dependencies: anyone who clones the repo runs `npm install` instead
+node_modules/
+
+# The bot's memory database (SQLite plus its WAL/SHM side files)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets: API keys for the LLM in Step 5 go in a .env file
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Minecraft server files, in case you ever put the server inside this folder
+server/
+world/
+*.jar
+eula.txt
+server.properties
+usercache.json
+banned-*.json
+ops.json
+whitelist.json
+
+# Editor and OS clutter
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
