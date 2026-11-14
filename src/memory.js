@@ -139,6 +139,45 @@ class Memory {
     }
 
     record (methodId, success, ms, error = null) {
-        
+        if (success) {
+            this.db.prepare(`
+                UPDATE methods SET verified = 1, successes = successes + 1,
+                avg_ms = CASE WHEN avg_ms IS NULL THEN ? ELSE (avg_ms * successes + ?) / (successes + 1) END
+                WHERE ID = ?`).run(ms, ms, methodId)
+            } else {
+                this.db.prepare('UPDATE methods SET failures = failures + 1, last_error = ? WHERE id = ?')
+                .run(error, methodId)
+            }
+        }
+
+    setTool(methodId, tool, toolAny) {
+        this.db.prepare('UPDATE methods SET tool = ?, tool_any = ? WHERE id = ?')
+        .run(tool, JSON.stringify(toolAny) ,methodId)
     }
-}
+
+    // experience
+    logEpisode ({seed, goal, success, chain, ms}) {
+        this.db.prepare('INSERT INTO episodes(seed, goal, success, chain_json, ms) VALUES (?, ?, ?, ? ,?)')
+        .run(seed, goal, success ? 1 : 0,
+        JSON.stringify(chain), ms)
+    }
+
+    // world facts (per seed)
+    remember(seed, kind, name, pos) {
+        this.db.prepare('INSERT INTO world(seed, kind, name, x, y, z) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(seed, kind, name, Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))
+    }
+
+    wipeWorld(seed) {
+        this.db.prepare('DELETE FROM world WHERE seed != ?').run(seed)
+    }
+
+    // inspection
+    verifiedGraph() {
+        return this.db.prepare('SELECT * FROM methods WHERE verified = 1 ORDER BY output').all().map((m) => ({...m,
+            inputs:  this.db.prepare('SELECT item, count FROM method_inputs WHERE method_id = ?').all(m.id)
+        }))
+    }
+    }
+
+    module.exports = {Memory}
