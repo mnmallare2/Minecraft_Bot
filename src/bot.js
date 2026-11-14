@@ -41,7 +41,7 @@ bot.once('spawn', () => {
 
         // craft <item> quick test command
         if (cmd === 'craft' && a) {
-            const item = mcData.itemsByname[a]
+            const item = mcData.itemsByName[a]
             if (!item) return bot.chat(`Unknown items ${a}`)
             //prefer a recipe we already have the ingredients for
             const recipe = bot.recipesFor(item.id, null, 1, true)[0] || bot.recipesAll(item.id, null, true)[0]

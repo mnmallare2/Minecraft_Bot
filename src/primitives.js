@@ -32,7 +32,9 @@ function createPrimitives (bot, mcData) {
             ])
             return ok()
         } catch (err) {
-            bot.pathfinder.stop()
+            // Cancelled by clearing the goal
+            // Not using bot.pathfinder.stop() so one failure wouldn't make each future move fail instantly
+            bot.pathfinder.setGoal(null)
             return fail('path_failed', err.message)
         } finally {
             clearTimeout(timer)
@@ -118,6 +120,7 @@ function createPrimitives (bot, mcData) {
                     if (!canExplore || ++misses >3) return res
                     bot.chat(`No Reachable ${blockName}, exploring...`)
                     const ex = await explore()
+                    console.log('explore result: ', ex)
                     if (!ex.ok && misses > 2) return res
                 }
                 return ok()
