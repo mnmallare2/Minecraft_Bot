@@ -43,13 +43,45 @@ function createPrimitives (bot, mcData) {
 
     // finding new terrain when nothing is nearby
     async function explore (distance = 40) {
+        await escapeWater()
+        let last_error
+        for (let attempt = 0; attempt < 4; attempt++) {
         const angle = Math.random() * Math.PI * 2
         const p = bot.entity.position
         const target = new Vec3(p.x + Math.cos(angle) * distance, p.y, p.z + Math.sin(angle) * distance)
+        const start = p.clone()
+        // GoalNearXZ ignores height: "get within 5 blocks of this spot, any y"
+        last = await goTo(new goals.GoalNearXZ(target.x, target.z, 5), 30000)
+        const moved = bot.entity.position.distanceTo(start)
+        if (last.ok || moved > 10) return ok({to: bot.entity.position.floored(), moved: Math.round(moved)})
+    }
+        return last
+    }
 
-        //Goal near XZ ignoring height
-        const res = await goTo(new goals.GoalNearXZ(target.x, target.z, 5), 45000)
-        return res.ok ? ok({ to: target.floored()}) : res
+    // getting out of water logic
+    // pathfinder can't jump from water onto land, so look for nearest dry block and hold forward + jump
+    async function escapeWater(timeoutMs = 10000) {
+        if (!bot.entity.isInWater) return ok()
+        
+        const land = bot.findBlock({
+            matching: (b) => b.boundingBox === 'block' && b.name !== 'water',
+            maxDistance: 16,
+            useExtraInfo: (b) => {
+                const above = bot.blockAt(b.position.offset(0, 1, 0))
+                return above && above.name === 'air'
+            }
+        })
+        if (!land) return fail('no_land', 'no dry land within 16 blocks')
+
+        bot.setControlState('forward', true)
+        bot.setControlState('jump', true)
+        const start = Date.now()
+        while (bot.entity.isInWater && Date.now() - start < timeoutMs) {
+            await bot.lookAt(land.position.offset(0.5, 1, 0.5)) // keep steering
+            await sleep(100)
+        }
+        bot.clearControlStates()
+        return bot.entity.isInWater ? fail('still_in_water', 'could not climb out') : ok()
     }
 
     // finding objects
@@ -61,14 +93,23 @@ function createPrimitives (bot, mcData) {
 
     // collecting item drops
     async function collectDropsNear ( pos, radius = 6) {
-        await sleep(400)
-        const drops = Object.values(bot.entities).filter((e) =>
-        e.name === 'item' && e.position.distanceTo(pos) < radius)
-        for (const drop of drops) {
-            if (!bot.entities[drop.id]) continue
-            await goTo(new GoalNear(drop.position.x, drop.position.y, drop.position.z, 1), 10000)
-            await sleep(150)
+        await sleep(500)
+        const ids = Object.values(bot.entities)
+        .filter((e) => e.name === 'item' && e.position.distanceTo(pos) < radius)
+        .map((e) => e.id)
+        
+        let missed = 0
+        for (const id of ids) {
+            // Up to 3 tries per item, re-reading where it is each time
+            // items keep rolling and falling after they drop
+            for (let attempt = 0; attempt < 3 && bot.entities[id]; attempt++) {
+                const p = bot.entities[id].position
+                await goTo(new GoalNear(p.x, p.y, p.z, 1), 15000)
+                await sleep(250)
+            }
+            if (bot.entities[id]) missed ++ // still on the ground
         }
+        return {seen: ids.length, missed}
     }
 
     // mining
@@ -99,10 +140,10 @@ function createPrimitives (bot, mcData) {
             } catch (err) {
                 return fail('dig_failed', err.message)
             }
-            await collectDropsNear(pos)
+            const drops = await collectDropsNear(pos)
             const gained = count(wantItem) - before
             if (gained <= 0) return fail('no_drop', `broke ${blockName} but got no ${wantItem}`)
-                return ok({gained})
+            return ok({gained})
             }
             return fail('unreachable', `found ${blockName} but could not reach any`)
         }
@@ -116,6 +157,8 @@ function createPrimitives (bot, mcData) {
                 while (count(wantItem) < target) {
                     const res = await mineOne(blockName, wantItem)
                     if (res.ok) { misses = 0; continue }
+                    // Lost a drop: just mine another one, no need to explore
+                    if (res.reason === 'pickup_failed') { if (++misses > 3) return res; continue}
                     if (res.reason === 'no_drop' || res.reason === 'dig_failed') return res
                     if (!canExplore || ++misses >3) return res
                     bot.chat(`No Reachable ${blockName}, exploring...`)
@@ -207,7 +250,7 @@ function createPrimitives (bot, mcData) {
         try { await bot.consume() } catch (err) { return fail('eat_failed', err.message) }
         return ok()
         }
-        return { count, hasAny, goTo, explore, findBlocks, mineOne, collect, placeNear, craft, eat, sleep}
+        return { count, hasAny, goTo, explore, escapeWater, findBlocks, mineOne, collect, placeNear, craft, eat, sleep}
 }
 
 module.exports = { createPrimitives}

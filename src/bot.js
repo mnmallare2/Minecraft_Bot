@@ -13,7 +13,10 @@ bot.loadPlugin(pathfinder)
 
 bot.once('spawn', () => {
     const mcData = require('minecraft-data')(bot.version)
-    bot.pathfinder.setMovements(new Movements(bot))
+    const movements = new Movements(bot)
+    movements.allowParkour = false // fewer falls while learning
+    movements.liquidCost = 3 //prefer walking around water
+    bot.pathfinder.setMovements(movements)
     const prim = createPrimitives(bot, mcData)
     bot.chat('Ready. Try: mine oak_log 3')
 
@@ -63,3 +66,6 @@ bot.once('spawn', () => {
 
 bot.on('kicked', (reason) => console.log('Kicked:', reason))
 bot.on('error', (err) => console.log('Error:', err.message))
+// Safety net: log async errors instead of letting them crash the bot
+process.on('unhandledRejection', (err) => console.error('Unhandled error:', err))
+process.on('uncaughtException', (err) => console.error('Uncaught error:', err))
